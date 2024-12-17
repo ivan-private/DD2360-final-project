@@ -13,6 +13,7 @@ class sphere: public hitable  {
         material *mat_ptr;
 };
 
+// try to optimize this
 __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
     vec3 oc = r.origin() - center;
     float a = dot(r.direction(), r.direction());

@@ -3,7 +3,7 @@ NVCC = nvcc
 
 # select one of these for Debug vs. Release
 #NVCC_DBG       = -g -G
-NVCC_DBG       = -O3 
+NVCC_DBG       = -O3 -g -use_fast_math
 
 # --device-debug                                  (-G)                            
 #         Generate debug information for device code. If --dopt is not specified, then
@@ -42,4 +42,4 @@ profile_metrics: cudart
 	nvprof --metrics achieved_occupancy,inst_executed,inst_fp_32,inst_fp_64,inst_integer ./cudart > out.ppm
 
 clean:
-	rm -f cudart cudart.o out.ppm out.jpg
+	rm -f cudart cudart.o
