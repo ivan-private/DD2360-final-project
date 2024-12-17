@@ -9,6 +9,9 @@
 #include "camera.h"
 #include "material.h"
 
+__constant__ int c_nx;
+__constant__ int c_ny;
+__constant__ int c_ns;
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -71,44 +74,25 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
-    u_int64_t render_t[2], color_t[2];
-    render_t[0] = clock64();
-
+__global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if((i >= max_x) || (j >= max_y)) return;
-    int pixel_index = j*max_x + i;
+    if((i >= c_nx) || (j >= c_ny)) return;
+    int pixel_index = j*c_nx + i;
     curandState local_rand_state = rand_state[pixel_index];
     vec3 col(0,0,0);
-
-    for(int s=0; s < ns; s++) {
-  
-        float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
-        float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
-
+    for(int s=0; s < c_ns; s++) {
+        float u = float(i + curand_uniform(&local_rand_state)) / float(c_nx);
+        float v = float(j + curand_uniform(&local_rand_state)) / float(c_ny);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-
-        color_t[0] = clock64();
-        col += color(r, world, &local_rand_state);  // bottleneck of this function
-        color_t[1] = clock64();
+        col += color(r, world, &local_rand_state);
     }
     rand_state[pixel_index] = local_rand_state;
-    col /= float(ns);
+    col /= float(c_ns);
     col[0] = sqrt(col[0]);
     col[1] = sqrt(col[1]);
     col[2] = sqrt(col[2]);
     fb[pixel_index] = col;
-
-    render_t[1] = clock64();
-    if (i < 5 && j == 0)
-    {
-        u_int64_t render_diff = render_t[1] - render_t[0];
-        u_int64_t color_diff = color_t[1] - color_t[0];
-        color_diff *= ns;
-        printf("color ratio of render: %f\n", float(color_diff) / float(render_diff));
-    }
-    
 }
 
 #define RND (curand_uniform(&local_rand_state))
@@ -172,6 +156,10 @@ int main() {
     int tx = 16;
     int ty = 16;
 
+    cudaMemcpyToSymbol(c_nx, &nx, sizeof(int));
+    cudaMemcpyToSymbol(c_ny, &ny, sizeof(int));
+    cudaMemcpyToSymbol(c_ns, &ns, sizeof(int));
+
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
 
@@ -213,7 +201,7 @@ int main() {
     render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
+    render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
