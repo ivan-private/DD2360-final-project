@@ -62,11 +62,11 @@ __global__ void rand_init(curandState *rand_state) {
     }
 }
 
-__global__ void render_init(int max_x, int max_y, curandState *rand_state) {
+__global__ void render_init(curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if((i >= max_x) || (j >= max_y)) return;
-    int pixel_index = j*max_x + i;
+    if((i >= c_nx) || (j >= c_ny)) return;
+    int pixel_index = j*c_nx + i;
     // Original: Each thread gets same seed, a different sequence number, no offset
     // curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
     // BUGFIX, see Issue#2: Each thread gets different seed, same sequence for
@@ -97,7 +97,7 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
 
 #define RND (curand_uniform(&local_rand_state))
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state) {
+__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, curandState *rand_state) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         curandState local_rand_state = *rand_state;
         d_list[0] = new sphere(vec3(0,-1000.0,-1), 1000,
@@ -134,7 +134,7 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera **d_cam
                                  lookat,
                                  vec3(0,1,0),
                                  30.0,
-                                 float(nx)/float(ny),
+                                 float(c_nx)/float(c_ny),
                                  aperture,
                                  dist_to_focus);
     }
@@ -189,7 +189,7 @@ int main() {
     checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
     camera **d_camera;
     checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-    create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    create_world<<<1,1>>>(d_list, d_world, d_camera, d_rand_state2);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -198,7 +198,7 @@ int main() {
     // Render our buffer
     dim3 threads(tx,ty);
     dim3 blocks((nx+tx-1)/tx, (ny+ty-1)/ty);
-    render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+    render_init<<<blocks, threads>>>(d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state);
