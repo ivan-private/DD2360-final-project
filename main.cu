@@ -2,6 +2,7 @@
 #include <time.h>
 #include <float.h>
 #include <curand_kernel.h>
+#include <cassert>
 #include "vec3.h"
 #include "ray.h"
 #include "sphere.h"
@@ -171,6 +172,7 @@ int main() {
     int ns = 10;
     int tx = 16;
     int ty = 16;
+    constexpr int N_STREAMS = 4;
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
@@ -207,19 +209,42 @@ int main() {
 
     clock_t start, stop;
     start = clock();
+
     // Render our buffer
     dim3 threads(tx,ty);
     dim3 blocks((nx+tx-1)/tx, (ny+ty-1)/ty);
+
     render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
-    checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaDeviceSynchronize());
+
+    cudaStream_t streams[N_STREAMS];
+    for (int i = 0; i < N_STREAMS; i++) {
+        checkCudaErrors(cudaStreamCreate(&streams[i]));
+    }
+
+    int rows_per_stream = ny / N_STREAMS;
+    for (int i = 0; i < N_STREAMS; i++) {
+        int offset = i * rows_per_stream;
+        int num_rows = rows_per_stream;
+        if (offset + num_rows > num_pixels) {
+            num_rows = num_pixels - offset;
+            assert(offset + num_rows <= num_pixels);
+        }
+        render<<<{(nx + threads.x - 1) / threads.x, (num_rows + threads.y - 1) / threads.y}, threads, 0, streams[i]>>>(fb + offset * nx, nx, num_rows, ns, d_camera, d_world, d_rand_state + offset * nx);
+        checkCudaErrors(cudaGetLastError());
+    }
+
+    for (int i = 0; i < N_STREAMS; i++) {
+        checkCudaErrors(cudaStreamSynchronize(streams[i]));
+    }
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
 
+    for (int i = 0; i < N_STREAMS; i++) {
+        checkCudaErrors(cudaStreamDestroy(streams[i]));
+    }
 
     // Output FB as Image
     // std::cout << "P3\n" << nx << " " << ny << "\n255\n";
@@ -232,7 +257,6 @@ int main() {
     //         std::cout << ir << " " << ig << " " << ib << "\n";
     //     }
     // }
-
 
     // clean up
     checkCudaErrors(cudaDeviceSynchronize());
