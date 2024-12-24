@@ -206,9 +206,12 @@ int main() {
     create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
+    
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 
-    clock_t start, stop;
-    start = clock();
+    cudaEventRecord(start);
 
     // Render our buffer
     dim3 threads(tx,ty);
@@ -223,24 +226,25 @@ int main() {
         checkCudaErrors(cudaStreamCreate(&streams[i]));
     }
 
-    int rows_per_stream = ny / N_STREAMS;
+    int rows_per_stream = (ny + N_STREAMS - 1) / N_STREAMS;
     for (int i = 0; i < N_STREAMS; i++) {
-        int offset = i * rows_per_stream;
-        int num_rows = rows_per_stream;
-        if (offset + num_rows > num_pixels) {
-            num_rows = num_pixels - offset;
-            assert(offset + num_rows <= num_pixels);
-        }
-        render<<<{(nx + threads.x - 1) / threads.x, (num_rows + threads.y - 1) / threads.y}, threads, 0, streams[i]>>>(fb + offset * nx, nx, num_rows, ns, d_camera, d_world, d_rand_state + offset * nx);
+        int start_y = i * rows_per_stream;
+        int end_y = min(start_y + rows_per_stream, ny);
+        int num_rows = end_y - start_y;
+        render<<<dim3((nx + tx - 1) / tx, (num_rows + ty - 1) / ty), threads, 0, streams[i]>>>(fb + start_y * nx, nx, num_rows, ns, d_camera, d_world, d_rand_state + start_y * nx);
         checkCudaErrors(cudaGetLastError());
     }
 
     for (int i = 0; i < N_STREAMS; i++) {
         checkCudaErrors(cudaStreamSynchronize(streams[i]));
     }
-    stop = clock();
-    double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
-    std::cerr << "took " << timer_seconds << " seconds.\n";
+   
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    float ms = 0;
+    cudaEventElapsedTime(&ms, start, stop);
+    std::cerr << "Took " << ms/1000.0f << " seconds.\n";
 
     for (int i = 0; i < N_STREAMS; i++) {
         checkCudaErrors(cudaStreamDestroy(streams[i]));
@@ -268,6 +272,9 @@ int main() {
     checkCudaErrors(cudaFree(d_rand_state));
     checkCudaErrors(cudaFree(d_rand_state2));
     checkCudaErrors(cudaFree(fb));
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     cudaDeviceReset();
 }
