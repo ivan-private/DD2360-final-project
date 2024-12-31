@@ -3,3 +3,5 @@ cudart
 cudart.o
 out.jpg
 out.ppm
+__pycache__
+.pytest_cache
