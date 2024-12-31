@@ -2,7 +2,7 @@ HOST_COMPILER  = g++
 NVCC = nvcc
 
 # select one of these for Debug vs. Release
-#NVCC_DBG       = -g -G
+#NVCC_DBG       = -g -lineinfo
 NVCC_DBG       = -O3 -g -use_fast_math
 
 # --device-debug                                  (-G)                            
@@ -40,6 +40,10 @@ profile_basic: cudart
 # use nvprof --query-metrics
 profile_metrics: cudart
 	nvprof --metrics achieved_occupancy,inst_executed,inst_fp_32,inst_fp_64,inst_integer ./cudart > out.ppm
+
+test: cudart
+	./cudart > out.ppm
+	pytest test_compare_ppm.py  
 
 clean:
 	rm -f cudart cudart.o
