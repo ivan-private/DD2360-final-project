@@ -9,14 +9,22 @@
 #include "camera.h"
 #include "material.h"
 
+#include "BVH.h"
+#include "bounding_box.h"
+
+#define NUM_HITABLES 22*22+1+3
+// #define NUM_HITABLES 3
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 
 void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
-    if (result) {
+    if (result) 
+    {
         std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
             file << ":" << line << " '" << func << "' \n";
+        std::cerr << "cudaGetErrorName = " << cudaGetErrorName(result) << '\n';
+        std::cerr << "cudaGetErrorString = " << cudaGetErrorString(result) << '\n'; 
         // Make sure we call CUDA Device Reset before exiting
         cudaDeviceReset();
         exit(99);
@@ -27,12 +35,15 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
 // it was blowing up the stack, so we have to turn this into a
 // limited-depth loop instead.  Later code in the book limits to a max
 // depth of 50, so we adapt this a few chapters early on the GPU.
-__device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) {
+__device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) 
+{
     ray cur_ray = r;
     vec3 cur_attenuation = vec3(1.0,1.0,1.0);
-    for(int i = 0; i < 50; i++) {
+    for(int i = 0; i < 50; i++) 
+    {
         hit_record rec;
-        if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) { // bottleneck of this function
+        if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) // bottleneck of this function
+        { 
             ray scattered;
             vec3 attenuation;
             if(rec.mat_ptr->scatter(cur_ray, rec, attenuation, scattered, local_rand_state)) {
@@ -54,7 +65,8 @@ __device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_sta
 }
 
 __global__ void rand_init(curandState *rand_state) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) 
+    {
         curand_init(1984, 0, 0, rand_state);
     }
 }
@@ -71,10 +83,8 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
-    u_int64_t render_t[2], color_t[2];
-    render_t[0] = clock64();
-
+__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) 
+{
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= max_x) || (j >= max_y)) return;
@@ -82,82 +92,77 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
     curandState local_rand_state = rand_state[pixel_index];
     vec3 col(0,0,0);
 
-    for(int s=0; s < ns; s++) {
-  
+    for(int s=0; s < ns; s++) 
+    {
         float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
         float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
 
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
 
-        color_t[0] = clock64();
         col += color(r, world, &local_rand_state);  // bottleneck of this function
-        color_t[1] = clock64();
     }
     rand_state[pixel_index] = local_rand_state;
     col /= float(ns);
     col[0] = sqrt(col[0]);
     col[1] = sqrt(col[1]);
     col[2] = sqrt(col[2]);
-    fb[pixel_index] = col;
-
-    render_t[1] = clock64();
-    if (i < 5 && j == 0)
-    {
-        u_int64_t render_diff = render_t[1] - render_t[0];
-        u_int64_t color_diff = color_t[1] - color_t[0];
-        color_diff *= ns;
-        printf("color ratio of render: %f\n", float(color_diff) / float(render_diff));
-    }
-    
+    fb[pixel_index] = col;    
 }
 
 #define RND (curand_uniform(&local_rand_state))
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        curandState local_rand_state = *rand_state;
-        d_list[0] = new sphere(vec3(0,-1000.0,-1), 1000,
-                               new lambertian(vec3(0.5, 0.5, 0.5)));
-        int i = 1;
-        for(int a = -11; a < 11; a++) {
-            for(int b = -11; b < 11; b++) {
-                float choose_mat = RND;
-                vec3 center(a+RND,0.2,b+RND);
-                if(choose_mat < 0.8f) {
-                    d_list[i++] = new sphere(center, 0.2,
-                                             new lambertian(vec3(RND*RND, RND*RND, RND*RND)));
-                }
-                else if(choose_mat < 0.95f) {
-                    d_list[i++] = new sphere(center, 0.2,
-                                             new metal(vec3(0.5f*(1.0f+RND), 0.5f*(1.0f+RND), 0.5f*(1.0f+RND)), 0.5f*RND));
-                }
-                else {
-                    d_list[i++] = new sphere(center, 0.2, new dielectric(1.5));
-                }
+__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state) 
+{
+    if ( !(threadIdx.x == 0 && blockIdx.x == 0) ) return; 
+    
+    curandState local_rand_state = *rand_state;
+    d_list[0] = new sphere(vec3(0,-1000.0,-1), 1000,
+                            new lambertian(vec3(0.5, 0.5, 0.5)));
+    int i = 1;
+    for(int a = -11; a < 11; a++) {
+        for(int b = -11; b < 11; b++) {
+            float choose_mat = RND;
+            vec3 center(a+RND,0.2,b+RND);
+            if(choose_mat < 0.8f) {
+                d_list[i++] = new sphere(center, 0.2,
+                                            new lambertian(vec3(RND*RND, RND*RND, RND*RND)));
+            }
+            else if(choose_mat < 0.95f) {
+                d_list[i++] = new sphere(center, 0.2,
+                                            new metal(vec3(0.5f*(1.0f+RND), 0.5f*(1.0f+RND), 0.5f*(1.0f+RND)), 0.5f*RND));
+            }
+            else {
+                d_list[i++] = new sphere(center, 0.2, new dielectric(1.5));
             }
         }
-        d_list[i++] = new sphere(vec3(0, 1,0),  1.0, new dielectric(1.5));
-        d_list[i++] = new sphere(vec3(-4, 1, 0), 1.0, new lambertian(vec3(0.4, 0.2, 0.1)));
-        d_list[i++] = new sphere(vec3(4, 1, 0),  1.0, new metal(vec3(0.7, 0.6, 0.5), 0.0));
-        *rand_state = local_rand_state;
-        *d_world  = new hitable_list(d_list, 22*22+1+3);
-
-        vec3 lookfrom(13,2,3);
-        vec3 lookat(0,0,0);
-        float dist_to_focus = 10.0; (lookfrom-lookat).length();
-        float aperture = 0.1;
-        *d_camera   = new camera(lookfrom,
-                                 lookat,
-                                 vec3(0,1,0),
-                                 30.0,
-                                 float(nx)/float(ny),
-                                 aperture,
-                                 dist_to_focus);
     }
+    d_list[i++] = new sphere(vec3(0, 1,0),  1.0, new dielectric(1.5));
+    d_list[i++] = new sphere(vec3(-4, 1, 0), 1.0, new lambertian(vec3(0.4, 0.2, 0.1)));
+    d_list[i++] = new sphere(vec3(4, 1, 0),  1.0, new metal(vec3(0.7, 0.6, 0.5), 0.0));
+    *rand_state = local_rand_state;
+    //*d_world  = new hitable_list(d_list, 22*22+1+3);
+    //printf("BEFORE WORLD\n");
+    *d_world = new BVH(d_list, NUM_HITABLES);
+    //printf("AFTER WORLD\n");
+
+    vec3 lookfrom(13,2,3);
+    vec3 lookat(0,0,0);
+    float dist_to_focus = 10.0; (lookfrom-lookat).length();
+    float aperture = 0.1;
+    *d_camera   = new camera(lookfrom,
+                                lookat,
+                                vec3(0,1,0),
+                                30.0,
+                                float(nx)/float(ny),
+                                aperture,
+                                dist_to_focus);
+
 }
 
-__global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
-    for(int i=0; i < 22*22+1+3; i++) {
+__global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) 
+{
+    for(int i=0; i < NUM_HITABLES; i++) 
+    {
         delete ((sphere *)d_list[i])->mat_ptr;
         delete d_list[i];
     }
@@ -165,7 +170,33 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
     delete *d_camera;
 }
 
-int main() {
+
+__global__ void test_bvh(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state)
+{
+    if ( !(threadIdx.x == 0 && blockIdx.x == 0) ) return;
+
+    d_list[0] = new sphere(vec3(0, 1,0),  1.0, new dielectric(1.5));
+    d_list[1] = new sphere(vec3(-4, 1, 0), 1.0, new lambertian(vec3(0.4, 0.2, 0.1)));
+    d_list[2] = new sphere(vec3(4, 1, 0),  1.0, new metal(vec3(0.7, 0.6, 0.5), 0.0));
+
+    *d_world = new BVH(d_list, NUM_HITABLES);
+
+    vec3 lookfrom(13,2,3);
+    vec3 lookat(0,0,0);
+    float dist_to_focus = 10.0; (lookfrom-lookat).length();
+    float aperture = 0.1;
+    *d_camera   = new camera(lookfrom,
+                                lookat,
+                                vec3(0,1,0),
+                                30.0,
+                                float(nx)/float(ny),
+                                aperture,
+                                dist_to_focus);
+} 
+
+
+int main() 
+{
     int nx = 1200;
     int ny = 800;
     int ns = 10;
@@ -195,13 +226,17 @@ int main() {
 
     // make our world of hitables & the camera
     hitable **d_list;
-    int num_hitables = 22*22+1+3;
-    checkCudaErrors(cudaMalloc((void **)&d_list, num_hitables*sizeof(hitable *)));
+    // int num_hitables = 22*22+1+3;
+    checkCudaErrors(cudaMalloc((void **)&d_list, NUM_HITABLES*sizeof(hitable *)));
     hitable **d_world;
     checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
     camera **d_camera;
     checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
+
     create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    // test_bvh<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    
+
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -222,16 +257,16 @@ int main() {
 
 
     // Output FB as Image
-    // std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    // for (int j = ny-1; j >= 0; j--) {
-    //     for (int i = 0; i < nx; i++) {
-    //         size_t pixel_index = j*nx + i;
-    //         int ir = int(255.99*fb[pixel_index].r());
-    //         int ig = int(255.99*fb[pixel_index].g());
-    //         int ib = int(255.99*fb[pixel_index].b());
-    //         std::cout << ir << " " << ig << " " << ib << "\n";
-    //     }
-    // }
+    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    for (int j = ny-1; j >= 0; j--) {
+        for (int i = 0; i < nx; i++) {
+            size_t pixel_index = j*nx + i;
+            int ir = int(255.99*fb[pixel_index].r());
+            int ig = int(255.99*fb[pixel_index].g());
+            int ib = int(255.99*fb[pixel_index].b());
+            std::cout << ir << " " << ig << " " << ib << "\n";
+        }
+    }
 
 
     // clean up

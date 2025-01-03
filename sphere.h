@@ -2,19 +2,23 @@
 #define SPHEREH
 
 #include "hitable.h"
+#include "bounding_box.h"
 
-class sphere: public hitable  {
-    public:
-        __device__ sphere() {}
-        __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
-        __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
-        vec3 center;
-        float radius;
-        material *mat_ptr;
+struct sphere : public hitable  
+{
+    __device__ sphere() {}
+    __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
+    __device__ bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const override;
+    __device__ BoundingBox bounding_box() const override;
+
+    vec3 center;
+    float radius;
+    material* mat_ptr;
 };
 
 // try to optimize this
-__device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
+__device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const 
+{
     vec3 oc = r.origin() - center;
     float a = dot(r.direction(), r.direction());
     float b = dot(oc, r.direction());
@@ -39,6 +43,13 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
         }
     }
     return false;
+}
+
+
+__device__ BoundingBox sphere::bounding_box() const
+{
+    const vec3 r(radius, radius, radius);
+    return BoundingBox(center - r, center + r);
 }
 
 

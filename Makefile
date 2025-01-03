@@ -2,8 +2,8 @@ HOST_COMPILER  = g++
 NVCC = nvcc
 
 # select one of these for Debug vs. Release
-#NVCC_DBG       = -g -lineinfo
-NVCC_DBG       = -O3 -g -use_fast_math
+NVCC_DBG       = -g -lineinfo
+#NVCC_DBG       = -O3 -g -use_fast_math
 
 # --device-debug                                  (-G)                            
 #         Generate debug information for device code. If --dopt is not specified, then
@@ -18,7 +18,7 @@ NVCCFLAGS      = $(NVCC_DBG) -arch=$(ARCH) -std=c++20
 #GENCODE_FLAGS  = -gencode arch=compute_60,code=sm_60
 
 SRCS = main.cu
-INCS = vec3.h ray.h hitable.h hitable_list.h sphere.h camera.h material.h
+INCS = vec3.h ray.h hitable.h hitable_list.h sphere.h camera.h material.h bounding_box.h BVH.h
 
 cudart: cudart.o
 	$(NVCC) $(NVCCFLAGS) -o cudart cudart.o
