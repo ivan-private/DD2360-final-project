@@ -2,8 +2,9 @@ HOST_COMPILER  = g++
 NVCC = nvcc
 
 # select one of these for Debug vs. Release
-NVCC_DBG       = -g -lineinfo
-#NVCC_DBG       = -O3 -g -use_fast_math
+# NVCC_DBG       = -g -lineinfo
+NVCC_DBG       = -O3 -g -use_fast_math
+
 
 # --device-debug                                  (-G)                            
 #         Generate debug information for device code. If --dopt is not specified, then

@@ -16,7 +16,7 @@
 
 #define TEST_SCENE false
 
-#define USE_BVH false
+#define USE_BVH true
 
 #if !TEST_SCENE
     #define NUM_HITABLES 22*22+1+3
