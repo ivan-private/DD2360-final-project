@@ -18,7 +18,7 @@
 
 #define TEST_SCENE false
 
-#define USE_BVH false
+#define USE_BVH true
 
 #define USE_HITABLE false
 

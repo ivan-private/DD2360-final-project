@@ -10,7 +10,7 @@
 
 struct Sphere  
 {
-    // __host__ __device__ Sphere() {}
+    __host__ __device__ Sphere() {}
 
     __host__ __device__ 
     Sphere(vec3 cen, float r, Material m) : center(cen), radius(r), mat(m)  {};
