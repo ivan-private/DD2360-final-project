@@ -40,7 +40,7 @@ def compare_ppm(file1: str, file2: str) -> bool:
 
 
 def test_compare_ppm():
-    reference_file = "old-pic.ppm"
+    reference_file = "fast-math-pic.ppm"
     output_file = "out.ppm"
 
     assert compare_ppm(reference_file, output_file), "The files do not match."

@@ -1,36 +1,47 @@
-#ifndef SPHEREH
-#define SPHEREH
+#pragma once
 
-#include "hitable.h"
+#include <cassert>
+
 #include "bounding_box.h"
+#include "vec3.h"
+#include "ray.h"
+#include "material.h"
+#include "hit_record.h"
 
-struct sphere : public hitable  
+struct Sphere  
 {
-    __device__ sphere() {}
-    __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
-    __device__ bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const override;
-    __device__ BoundingBox bounding_box() const override;
+    // __host__ __device__ Sphere() {}
+
+    __host__ __device__ 
+    Sphere(vec3 cen, float r, Material m) : center(cen), radius(r), mat(m)  {};
+
+    __device__ 
+    bool hit(const ray& r, float tmin, float tmax, HitRecord& rec) const;
+
+    __host__ __device__ 
+    BoundingBox bounding_box() const;
 
     vec3 center;
     float radius;
-    material* mat_ptr;
+    Material mat;
 };
 
 // try to optimize this
-__device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const 
+__device__ bool Sphere::hit(const ray& r, float t_min, float t_max, HitRecord& rec) const 
 {
     vec3 oc = r.origin() - center;
     float a = dot(r.direction(), r.direction());
     float b = dot(oc, r.direction());
     float c = dot(oc, oc) - radius*radius;
     float discriminant = b*b - a*c;
-    if (discriminant > 0) {
+    if (discriminant > 0) 
+    {
         float temp = (-b - sqrt(discriminant))/a;
         if (temp < t_max && temp > t_min) {
             rec.t = temp;
             rec.p = r.point_at_parameter(rec.t);
             rec.normal = (rec.p - center) / radius;
-            rec.mat_ptr = mat_ptr;
+            rec.mat = mat;
             return true;
         }
         temp = (-b + sqrt(discriminant)) / a;
@@ -38,7 +49,7 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
             rec.t = temp;
             rec.p = r.point_at_parameter(rec.t);
             rec.normal = (rec.p - center) / radius;
-            rec.mat_ptr = mat_ptr;
+            rec.mat = mat;
             return true;
         }
     }
@@ -46,11 +57,9 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
 }
 
 
-__device__ BoundingBox sphere::bounding_box() const
+__device__ BoundingBox Sphere::bounding_box() const
 {
     const vec3 r(radius, radius, radius);
     return BoundingBox(center - r, center + r);
 }
 
-
-#endif

@@ -1,22 +1,18 @@
 #pragma once
 
-#include "hitable.h"
 #include "vec3.h"
+#include "ray.h"
+#include "hit_record.h"
 
-
-struct BoundingBox : public hitable
+struct BoundingBox 
 {
-    vec3 lower;
-    vec3 upper;
+    __host__ __device__ BoundingBox() {}
 
+    __host__ __device__ BoundingBox(vec3 lower, vec3 upper) : lower(lower), upper(upper) {}
 
-    __device__ BoundingBox() {}
-    __device__ BoundingBox(vec3 lower, vec3 upper)
-        : lower(lower), upper(upper) {}
+    __host__ __device__ BoundingBox bounding_box() const { return BoundingBox(lower, upper); }
 
-    __device__ BoundingBox bounding_box() const override { return BoundingBox(lower, upper); }
-
-    __device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override
+    __device__ bool hit(const ray& r, float t_min, float t_max, HitRecord& rec) const 
     {
         for (int axis = 0; axis < 3; ++axis)
         {
@@ -43,7 +39,7 @@ struct BoundingBox : public hitable
 
 
     // Helper function to compute surrounding bounding box
-    __device__ static BoundingBox surrounding_box(const BoundingBox& box0, const BoundingBox& box1) 
+    __host__ __device__ static BoundingBox surrounding_box(const BoundingBox& box0, const BoundingBox& box1) 
     {
         const vec3 small(min(box0.lower.x(), box1.lower.x()),
                 min(box0.lower.y(), box1.lower.y()),
@@ -55,6 +51,10 @@ struct BoundingBox : public hitable
 
         return BoundingBox(small, big);
     }
+
+
+    vec3 lower;
+    vec3 upper;
 };
 
 
