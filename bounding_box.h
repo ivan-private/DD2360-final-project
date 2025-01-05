@@ -14,7 +14,7 @@ struct BoundingBox : public hitable
     __device__ BoundingBox(vec3 lower, vec3 upper)
         : lower(lower), upper(upper) {}
 
-    __device__ BoundingBox bounding_box() const override { return *this; }
+    __device__ BoundingBox bounding_box() const override { return BoundingBox(lower, upper); }
 
     __device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override
     {
@@ -54,7 +54,7 @@ struct BoundingBox : public hitable
                 max(box0.upper.z(), box1.upper.z()));
 
         return BoundingBox(small, big);
-}
+    }
 };
 
 

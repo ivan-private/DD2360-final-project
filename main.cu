@@ -9,11 +9,22 @@
 #include "camera.h"
 #include "material.h"
 
+#include <vector>
+
 #include "BVH.h"
 #include "bounding_box.h"
 
-#define NUM_HITABLES 22*22+1+3
-// #define NUM_HITABLES 3
+#define TEST_SCENE false
+
+#define USE_BVH false
+
+#if !TEST_SCENE
+    #define NUM_HITABLES 22*22+1+3
+#else
+    #define NUM_HITABLES 3
+#endif
+
+
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -35,7 +46,7 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
 // it was blowing up the stack, so we have to turn this into a
 // limited-depth loop instead.  Later code in the book limits to a max
 // depth of 50, so we adapt this a few chapters early on the GPU.
-__device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) 
+__device__ vec3 color(const ray& r, hitable** world, curandState* local_rand_state) 
 {
     ray cur_ray = r;
     vec3 cur_attenuation = vec3(1.0,1.0,1.0);
@@ -83,7 +94,7 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) 
+__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera** cam, hitable** world, curandState* rand_state) 
 {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
@@ -111,7 +122,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
 
 #define RND (curand_uniform(&local_rand_state))
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state) 
+__global__ void create_world(hitable** d_list, hitable** d_world, camera** d_camera, int nx, int ny, curandState* rand_state) 
 {
     if ( !(threadIdx.x == 0 && blockIdx.x == 0) ) return; 
     
@@ -139,23 +150,29 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera **d_cam
     d_list[i++] = new sphere(vec3(0, 1,0),  1.0, new dielectric(1.5));
     d_list[i++] = new sphere(vec3(-4, 1, 0), 1.0, new lambertian(vec3(0.4, 0.2, 0.1)));
     d_list[i++] = new sphere(vec3(4, 1, 0),  1.0, new metal(vec3(0.7, 0.6, 0.5), 0.0));
+
+    
+
+
     *rand_state = local_rand_state;
-    //*d_world  = new hitable_list(d_list, 22*22+1+3);
-    //printf("BEFORE WORLD\n");
+
+#if !USE_BVH
+    *d_world  = new hitable_list(d_list, NUM_HITABLES);
+#else
     *d_world = new BVH(d_list, NUM_HITABLES);
-    //printf("AFTER WORLD\n");
+#endif
 
     vec3 lookfrom(13,2,3);
     vec3 lookat(0,0,0);
     float dist_to_focus = 10.0; (lookfrom-lookat).length();
     float aperture = 0.1;
-    *d_camera   = new camera(lookfrom,
-                                lookat,
-                                vec3(0,1,0),
-                                30.0,
-                                float(nx)/float(ny),
-                                aperture,
-                                dist_to_focus);
+    *d_camera = new camera(lookfrom,
+                            lookat,
+                            vec3(0,1,0),
+                            30.0,
+                            float(nx)/float(ny),
+                            aperture,
+                            dist_to_focus);
 
 }
 
@@ -171,7 +188,7 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
 }
 
 
-__global__ void test_bvh(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state)
+__global__ void test_bvh(hitable** d_list, hitable** d_world, camera** d_camera, int nx, int ny, curandState* rand_state)
 {
     if ( !(threadIdx.x == 0 && blockIdx.x == 0) ) return;
 
@@ -203,6 +220,15 @@ int main()
     int tx = 16;
     int ty = 16;
 
+
+//#if USE_BVH
+    cudaDeviceSetLimit(cudaLimit::cudaLimitStackSize, 100000);
+    size_t max_bytes;
+    cudaDeviceGetLimit(&max_bytes, cudaLimit::cudaLimitStackSize);
+    std::cerr << "MAX STACK SIZE: "<< max_bytes << "\n";
+//#endif
+    
+
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
 
@@ -228,14 +254,16 @@ int main()
     hitable **d_list;
     // int num_hitables = 22*22+1+3;
     checkCudaErrors(cudaMalloc((void **)&d_list, NUM_HITABLES*sizeof(hitable *)));
-    hitable **d_world;
+    hitable** d_world;
     checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
-    camera **d_camera;
+    camera** d_camera;
     checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
 
+#if TEST_SCENE
+    test_bvh<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+#else
     create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
-    // test_bvh<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
-    
+#endif
 
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
@@ -251,6 +279,7 @@ int main()
     render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
+    
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
@@ -273,8 +302,8 @@ int main()
     checkCudaErrors(cudaDeviceSynchronize());
     free_world<<<1,1>>>(d_list,d_world,d_camera);
     checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaFree(d_camera));
-    checkCudaErrors(cudaFree(d_world));
+    //checkCudaErrors(cudaFree(d_camera));
+    //checkCudaErrors(cudaFree(d_world));
     checkCudaErrors(cudaFree(d_list));
     checkCudaErrors(cudaFree(d_rand_state));
     checkCudaErrors(cudaFree(d_rand_state2));
