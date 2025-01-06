@@ -22,6 +22,7 @@ __device__ bool hitable_list::hit(const ray& r, float t_min, float t_max, hit_re
                 hit_anything = true; // TODO: maybe return true early?? 
                 closest_so_far = temp_rec.t;
                 rec = temp_rec;
+                if (closest_so_far < t_min) return true; // return early
             }
         }
         return hit_anything;
