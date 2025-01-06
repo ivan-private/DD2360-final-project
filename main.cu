@@ -18,7 +18,7 @@
 
 #define TEST_SCENE false
 
-#define USE_BVH true
+#define USE_BVH false
 
 #define USE_HITABLE false
 
@@ -263,8 +263,8 @@ int main()
     int nx = 1200;
     int ny = 800;
     int ns = 10;
-    int tx = 16;
-    int ty = 16;
+    int tx = 8;
+    int ty = 8;
 
 
 #if USE_BVH
@@ -335,16 +335,16 @@ int main()
 
 
     // Output FB as Image
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    for (int j = ny-1; j >= 0; j--) {
-        for (int i = 0; i < nx; i++) {
-            size_t pixel_index = j*nx + i;
-            int ir = int(255.99*fb[pixel_index].r());
-            int ig = int(255.99*fb[pixel_index].g());
-            int ib = int(255.99*fb[pixel_index].b());
-            std::cout << ir << " " << ig << " " << ib << "\n";
-        }
-    }
+    // std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    // for (int j = ny-1; j >= 0; j--) {
+    //     for (int i = 0; i < nx; i++) {
+    //         size_t pixel_index = j*nx + i;
+    //         int ir = int(255.99*fb[pixel_index].r());
+    //         int ig = int(255.99*fb[pixel_index].g());
+    //         int ib = int(255.99*fb[pixel_index].b());
+    //         std::cout << ir << " " << ig << " " << ib << "\n";
+    //     }
+    // }
 
 
     // clean up
