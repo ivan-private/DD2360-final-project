@@ -160,8 +160,10 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera **d_cam
     if (idx >= 22 * 22 + 4)
         return;
 
-    curandState local_rand_state = *rand_state;
+    // curandState local_rand_state = *rand_state;
+    curandState local_rand_state;
 
+    curand_init(1984 + idx, 0, 0, &local_rand_state);
     if (idx == 0)
     {
         d_list[0] = new sphere(vec3(0, -1000.0, -1), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
@@ -299,6 +301,8 @@ int main() {
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
+    clock_t start, stop;
+    start = clock();
     // make our world of hitables & the camera
     hitable **d_list;
     int num_hitables = 22*22+1+3;
@@ -313,8 +317,7 @@ int main() {
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
-    clock_t start, stop;
-    start = clock();
+
     // Render our buffer
     dim3 threads(tx,ty);
     dim3 blocks((nx+tx-1)/tx, (ny+ty-1)/ty);
@@ -333,16 +336,16 @@ int main() {
 
 
     // Output FB as Image
-    // std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    // for (int j = ny-1; j >= 0; j--) {
-    //     for (int i = 0; i < nx; i++) {
-    //         size_t pixel_index = j*nx + i;
-    //         int ir = int(255.99*fb[pixel_index].r());
-    //         int ig = int(255.99*fb[pixel_index].g());
-    //         int ib = int(255.99*fb[pixel_index].b());
-    //         std::cout << ir << " " << ig << " " << ib << "\n";
-    //     }
-    // }
+    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    for (int j = ny-1; j >= 0; j--) {
+        for (int i = 0; i < nx; i++) {
+            size_t pixel_index = j*nx + i;
+            int ir = int(255.99*fb[pixel_index].r());
+            int ig = int(255.99*fb[pixel_index].g());
+            int ib = int(255.99*fb[pixel_index].b());
+            std::cout << ir << " " << ig << " " << ib << "\n";
+        }
+    }
 
 
     // clean up
