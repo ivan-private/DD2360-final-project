@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdint.h>
 #include <time.h>
 #include <float.h>
 #include <curand_kernel.h>
@@ -113,43 +114,55 @@ __global__ void render_shared_cam_world(vec3 *fb, int max_x, int max_y, int ns, 
 }
 
 __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
-    // u_int64_t render_t[2], color_t[2];
-    // render_t[0] = clock64();
+    uint64_t render_t[2], init_t = 0, for_t[2], uv_t = 0, getray_t = 0, color_t = 0, sqrt_t = 0;
+    render_t[0] = clock64();
 
+    uint64_t init_start = clock64();
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= max_x) || (j >= max_y)) return;
     int pixel_index = j*max_x + i;
     curandState local_rand_state = rand_state[pixel_index];
     vec3 col(0,0,0);
+    init_t = clock64() - init_start;
 
+    for_t[0] = clock64();
     for(int s=0; s < ns; s++) {
-  
+        uint64_t uv_start = clock64();
         float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
         float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
+        uv_t += clock64() - uv_start;
 
+        uint64_t getray_t_start = clock64();
         ray r = (*cam )->get_ray(u, v, &local_rand_state);
+        getray_t += clock64() - getray_t_start;
 
-        // color_t[0] = clock64();
+        uint64_t color_t_start = clock64();
         col += color(r, world, &local_rand_state);  // bottleneck of this function
-        // color_t[1] = clock64();
+        color_t += clock64() - color_t_start;
     }
+    for_t[1] = clock64();
+
+    uint64_t sqrt_start = clock64();
     rand_state[pixel_index] = local_rand_state;
     col /= float(ns);
     col[0] = sqrt(col[0]);
     col[1] = sqrt(col[1]);
     col[2] = sqrt(col[2]);
     fb[pixel_index] = col;
+    sqrt_t = clock64() - sqrt_start;
 
-    // render_t[1] = clock64();
-    // if (i < 5 && j == 0)
-    // {
-    //     u_int64_t render_diff = render_t[1] - render_t[0];
-    //     u_int64_t color_diff = color_t[1] - color_t[0];
-    //     color_diff *= ns;
-    //     printf("color ratio of render: %f\n", float(color_diff) / float(render_diff));
-    // }
-    
+    render_t[1] = clock64();
+    if (i == 0 && j == 0)
+    {
+        printf("render cycles: %llu\n", render_t[1] - render_t[0]);
+        printf("init cycles: %llu\n", init_t);
+        printf("%d-loop-for cycles: %llu\n", ns, for_t[1] - for_t[0]);
+        printf("uv cycles: %llu\n", uv_t);
+        printf("get_ray cycles: %llu\n", getray_t);
+        printf("color cycles: %llu\n", color_t);
+        printf("sqrt cycles: %llu\n", sqrt_t);
+    }
 }
 
 #define RND (curand_uniform(&local_rand_state))
@@ -336,16 +349,16 @@ int main() {
 
 
     // Output FB as Image
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    for (int j = ny-1; j >= 0; j--) {
-        for (int i = 0; i < nx; i++) {
-            size_t pixel_index = j*nx + i;
-            int ir = int(255.99*fb[pixel_index].r());
-            int ig = int(255.99*fb[pixel_index].g());
-            int ib = int(255.99*fb[pixel_index].b());
-            std::cout << ir << " " << ig << " " << ib << "\n";
-        }
-    }
+    // std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    // for (int j = ny-1; j >= 0; j--) {
+    //     for (int i = 0; i < nx; i++) {
+    //         size_t pixel_index = j*nx + i;
+    //         int ir = int(255.99*fb[pixel_index].r());
+    //         int ig = int(255.99*fb[pixel_index].g());
+    //         int ib = int(255.99*fb[pixel_index].b());
+    //         std::cout << ir << " " << ig << " " << ib << "\n";
+    //     }
+    // }
 
 
     // clean up
